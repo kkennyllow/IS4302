@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
+import "./VRFv2Consumer.sol";
+
 contract Deck {
     struct Card {
         uint8 suit;
@@ -13,11 +15,13 @@ contract Deck {
         uint256 size;
         uint256 sum;
     }
-
+    VRFv2Consumer public vrfConsumer;
     Card[] public deck;
+    uint256 public requestID;
     mapping(address => Player) public Players;
 
-    constructor() {
+    constructor(VRFv2Consumer vrfConsumerAddress) {
+        vrfConsumer = vrfConsumerAddress;
         for (uint8 suit = 1; suit <= 4; suit++) {
             for (uint8 rank = 1; rank <= 13; rank++) {
                 deck.push(Card(suit, rank));
@@ -37,6 +41,11 @@ contract Deck {
         }
     }
 
+    function generateDrawRequest() external payable {
+        uint256 requestId = vrfConsumer.requestRandomWords();
+        requestID = requestId;
+    }
+
     function drawCard() public returns (uint8 suit, uint8 rank) {
         require(deck.length > 0, "No cards left in the deck");
         Card memory drawnCard = deck[deck.length - 1];
@@ -46,21 +55,32 @@ contract Deck {
     }
 
     function drawFromDeck() public returns (uint8 suit, uint8 rank) {
+        (bool fulfilled, uint256[] memory randomWords) = vrfConsumer
+            .getRequestStatus(requestID);
+        require(
+            fulfilled == true,
+            "Please hold on for a moment, transaction in progress. Try again later"
+        );
         require(deck.length > 0, "No cards left in the deck");
         require(
             Players[msg.sender].size <= 5,
             "Cannot draw more than 5 cards."
         );
         Card memory drawnCard = deck[deck.length - 1];
+        uint8 index = uint8(randomWords[0] % deck.length);
+        Card memory tmpCard = deck[index];
+        deck[index] = deck[deck.length - 1];
+        deck[deck.length - 1] = tmpCard;
+        drawnCard = deck[deck.length - 1];
+        deck.pop();
         suit = drawnCard.suit;
         rank = drawnCard.rank;
-        deck.pop();
         Players[msg.sender].hand.push(Card(suit, rank));
         if (rank >= 10) {
             rank = 10;
         }
         Players[msg.sender].sum += rank;
-        Players[msg.sender].size + 1;
+        Players[msg.sender].size += 1;
     }
 
     function checkHand() public view returns (Card[] memory) {
