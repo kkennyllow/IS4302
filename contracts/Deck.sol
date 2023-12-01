@@ -148,8 +148,12 @@ contract Deck {
         return Players[msg.sender].size;
     }
 
-    function totalSum() public view returns (uint256 sum) {
-        return Players[msg.sender].sum;
+    function totalSum(address player) public view returns (uint256 sum) {
+        return Players[player].sum;
+    }
+
+    function clearHand(address player) public {
+        delete Players[player].hand;
     }
 
     function distributeCards(address[] memory players) public {
