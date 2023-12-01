@@ -4,11 +4,16 @@ import "./Deck.sol";
 import "./BlockJackToken.sol";
 
 contract BlockJackCasino {
+    enum GamblingState {
+        NotGambling,
+        Gambling
+    }
+
     struct Table {
         uint256 tableNumber;
         address[] players;
         uint256 minimumBet;
-        bool gambling;
+        GamblingState gamblingState;
     }
     Deck deckContract;
     BlockJackToken blockJackTokenContract;
@@ -23,8 +28,18 @@ contract BlockJackCasino {
     }
 
     event buyCredit(uint256 amount); //buying token for BlockJack
-    event dealerLost(address indexed winner,uint256 amount,uint256 winnerSum,uint256 loserSum);
-    event dealerWon(address indexed loser,uint256 amount,uint256 winnerSum,uint256 loserSum);
+    event dealerLost(
+        address indexed winner,
+        uint256 amount,
+        uint256 winnerSum,
+        uint256 loserSum
+    );
+    event dealerWon(
+        address indexed loser,
+        uint256 amount,
+        uint256 winnerSum,
+        uint256 loserSum
+    );
     event dealerBlow(uint256 count);
 
     function getBJT() public payable {
@@ -68,7 +83,7 @@ contract BlockJackCasino {
             "Too many players are at this table. Pick another table."
         );
         require(
-            tables[table].gambling == false,
+            tables[table].gamblingState == GamblingState.NotGambling,
             "You cannot join a table that is in game."
         );
         uint256 minimumBet = getMinimumBet(table);
@@ -83,7 +98,7 @@ contract BlockJackCasino {
 
     function leaveTable(uint256 table) public {
         require(
-            tables[table].gambling == false,
+            tables[table].gamblingState == GamblingState.NotGambling,
             "You cannot leave a table when it is in game."
         );
         uint256 length = getTableSize(table);
@@ -102,14 +117,14 @@ contract BlockJackCasino {
             msg.sender == dealerAddress,
             "Only dealers can initiate Gamble."
         );
-        tables[table].gambling = true;
+        tables[table].gamblingState = GamblingState.NotGambling;
         tables[table].players.push(msg.sender);
         deckContract.distributeCards(tables[table].players);
     }
 
     function endGamble(uint256 table) public {
         require(msg.sender == dealerAddress, "Only dealers can end gamble.");
-        tables[table].gambling = false;
+        tables[table].gamblingState = GamblingState.Gambling;
         uint256 sum = deckContract.totalSum(dealerAddress);
         uint256 players = getTableSize(table);
         uint256 minimumBet = getMinimumBet(table);
@@ -135,9 +150,21 @@ contract BlockJackCasino {
                     minimumBet
                 );
                 deckContract.clearHand(tables[table].players[i]);
-                emit dealerLost( tables[table].players[i], minimumBet, playerValue, sum);
-            } else if (tables[table].players[i] != dealerAddress && sum != playerValue){
-                emit dealerWon(tables[table].players[i], minimumBet, sum, playerValue);
+                emit dealerLost(
+                    tables[table].players[i],
+                    minimumBet,
+                    playerValue,
+                    sum
+                );
+            } else if (
+                tables[table].players[i] != dealerAddress && sum != playerValue
+            ) {
+                emit dealerWon(
+                    tables[table].players[i],
+                    minimumBet,
+                    sum,
+                    playerValue
+                );
                 deckContract.clearHand(tables[table].players[i]);
             }
         }
