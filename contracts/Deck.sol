@@ -10,17 +10,32 @@ contract Deck {
         uint8 rank;
     }
 
+    enum PlayerState {
+        beforeStand,
+        Stand
+    }
+
+    enum CardState {
+        Shuffling,
+        Distributing,
+        Idling
+    }
+
     struct Player {
         address player;
         Card[] hand;
         uint256 size;
         uint256 sum;
+        PlayerState currentState;
     }
+
     VRFv2Consumer public vrfConsumer;
     Card[] public deck;
     uint256 public requestID;
     string public randomNumbersString;
     mapping(address => Player) public Players;
+    CardState public cardState;
+    address public owner;
 
     constructor(VRFv2Consumer vrfConsumerAddress) {
         vrfConsumer = vrfConsumerAddress;
@@ -30,10 +45,22 @@ contract Deck {
             }
         }
         generateDrawRequest();
+        owner = msg.sender;
     }
 
-    function shuffle() public {
+    function initializePlayers(address[] memory playerAddresses) public {
+        for (uint256 i = 0; i < playerAddresses.length; i++) {
+            address playerAddress = playerAddresses[i];
+            Players[playerAddress].player = playerAddress;
+            Players[playerAddress].size = 0;
+            Players[playerAddress].sum = 0;
+            Players[playerAddress].currentState = PlayerState.beforeStand;
+        }
+    }
+
+    function shuffle() private {
         uint256 deckSize = deck.length;
+        cardState = CardState.Shuffling;
         for (uint256 i = 0; i < deckSize; i++) {
             uint256 j = uint256(
                 keccak256(abi.encode(block.timestamp, block.coinbase, i))
@@ -44,18 +71,21 @@ contract Deck {
         }
     }
 
-    function generateDrawRequest() public payable {
+    function generateDrawRequest() private {
         uint256 requestId = vrfConsumer.requestRandomWords();
         requestID = requestId;
     }
 
-    function drawCard() public returns (uint8 suit, uint8 rank) {
+    function drawCard() private returns (uint8 suit, uint8 rank) {
         require(deck.length > 0, "No cards left in the deck");
         Card memory drawnCard = deck[deck.length - 1];
         (string memory first, string memory second) = splitString(
             randomNumbersString
         );
         uint8 index = stringToUint8(first);
+        if (index > deck.length) {
+            index = uint8(index % deck.length);
+        }
         randomNumbersString = second;
         Card memory swap = deck[index];
         deck[index] = drawnCard;
@@ -77,7 +107,7 @@ contract Deck {
     }
 
     function splitString(string memory str)
-        public
+        private
         pure
         returns (string memory, string memory)
     {
@@ -102,7 +132,7 @@ contract Deck {
         return (string(part1), string(part2));
     }
 
-    function stringToUint8(string memory str) public pure returns (uint8) {
+    function stringToUint8(string memory str) private pure returns (uint8) {
         bytes memory b = bytes(str);
         require(b.length > 0, "Empty string");
 
@@ -115,6 +145,10 @@ contract Deck {
     }
 
     function drawFromDeck() public returns (uint8 suit, uint8 rank) {
+        require(
+            Players[msg.sender].currentState == PlayerState.beforeStand,
+            "You cannot draw anymore cards."
+        );
         require(deck.length > 0, "No cards left in the deck");
         require(
             Players[msg.sender].size <= 5,
@@ -125,6 +159,9 @@ contract Deck {
             randomNumbersString
         );
         uint8 index = stringToUint8(first);
+        if (index > deck.length) {
+            index = uint8(index % deck.length);
+        }
         randomNumbersString = second;
         Card memory swap = deck[index];
         deck[index] = tempCard;
@@ -154,9 +191,12 @@ contract Deck {
 
     function clearHand(address player) public {
         delete Players[player].hand;
+        Players[player].size = 0;
+        Players[player].sum = 0;
     }
 
     function distributeCards(address[] memory players) public {
+        cardState = CardState.Distributing;
         require(players.length > 0, "No players provided");
         require(
             deck.length >= players.length * 2,
@@ -177,5 +217,26 @@ contract Deck {
                 Players[players[j]].size += 1;
             }
         }
+        cardState = CardState.Idling;
+    }
+
+    function stand() public {
+        require(
+            Players[msg.sender].currentState == PlayerState.beforeStand,
+            "You are already in Stand state."
+        );
+        Players[msg.sender].currentState = PlayerState.Stand;
+    }
+
+    function getCardState() public view returns (CardState) {
+        return cardState; // Query current card state
+    }
+
+    function showDealerFirst() public view returns (Card memory) {
+        return Players[owner].hand[0];
+    }
+
+    function showDealerCards() public view returns (Card[] memory) {
+        return Players[owner].hand;
     }
 }
