@@ -6,6 +6,8 @@ contract BlockJackToken {
     ERC20 erc20Contract;
     address owner;
 
+    //1 BlockJackToken cost 0.0001 ETH
+
     constructor() {
         ERC20 e = new ERC20();
         erc20Contract = e;
@@ -16,7 +18,7 @@ contract BlockJackToken {
         address recipient,
         uint256 weiAmt
     ) public returns (uint256) {
-        uint256 amt = weiAmt / (1000000000000000000 / 100); // Convert weiAmt to Dice Token
+        uint256 amt = weiAmt / (1000000000000000000 / 10000); // Convert weiAmt to BlockJackToken
         erc20Contract.mint(recipient, amt);
         return amt;
     }
@@ -33,7 +35,7 @@ contract BlockJackToken {
     function cashOut() public {
         uint256 credit = checkCredit(msg.sender);
         transferCredit(owner, credit);
-        uint256 amountInWei = credit / (1000000000000000000 / 100);
+        uint256 amountInWei = credit / (1000000000000000000 / 10000);
         payable(msg.sender).transfer(amountInWei);
     }
 }
