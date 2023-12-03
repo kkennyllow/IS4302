@@ -24,8 +24,8 @@ contract Deck {
     struct Player {
         address player;
         Card[] hand;
-        uint256 size;
         uint256 sum;
+        uint256 numAces;
         PlayerState currentState;
     }
 
@@ -52,13 +52,12 @@ contract Deck {
         for (uint256 i = 0; i < playerAddresses.length; i++) {
             address playerAddress = playerAddresses[i];
             Players[playerAddress].player = playerAddress;
-            Players[playerAddress].size = 0;
             Players[playerAddress].sum = 0;
             Players[playerAddress].currentState = PlayerState.beforeStand;
         }
     }
 
-    function shuffle() private {
+    function shuffle() public {
         uint256 deckSize = deck.length;
         cardState = CardState.Shuffling;
         for (uint256 i = 0; i < deckSize; i++) {
@@ -76,7 +75,7 @@ contract Deck {
         requestID = requestId;
     }
 
-    function drawCard() private returns (uint8 suit, uint8 rank) {
+    function drawCard() public returns (uint8 suit, uint8 rank) {
         require(deck.length > 0, "No cards left in the deck");
         Card memory drawnCard = deck[deck.length - 1];
         (string memory first, string memory second) = splitString(
@@ -93,6 +92,7 @@ contract Deck {
         suit = swap.suit;
         rank = swap.rank;
         deck.pop();
+        return (suit, rank);
     }
 
     function fulfillDrawRequest() public {
@@ -150,10 +150,6 @@ contract Deck {
             "You cannot draw anymore cards."
         );
         require(deck.length > 0, "No cards left in the deck");
-        require(
-            Players[msg.sender].size <= 5,
-            "Cannot draw more than 5 cards."
-        );
         Card memory tempCard = deck[deck.length - 1];
         (string memory first, string memory second) = splitString(
             randomNumbersString
@@ -170,19 +166,31 @@ contract Deck {
         suit = swap.suit;
         rank = swap.rank;
         Players[msg.sender].hand.push(Card(suit, rank));
-        if (rank >= 10) {
-            rank = 10;
+        if (
+            Players[msg.sender].numAces >= 1 &&
+            Players[msg.sender].sum + rank > 21
+        ) {
+            Players[msg.sender].sum -= 10;
+            Players[msg.sender].numAces -= 1;
         }
-        Players[msg.sender].sum += rank;
-        Players[msg.sender].size += 1;
+        if (rank == 1) {
+            if (Players[msg.sender].numAces >= 1) {
+                Players[msg.sender].sum += 1;
+                Players[msg.sender].numAces -= 1;
+            } else {
+                Players[msg.sender].sum += 11;
+                Players[msg.sender].numAces += 1;
+            }
+        } else if (rank >= 10) {
+            rank = 10;
+            Players[msg.sender].sum += rank;
+        } else {
+            Players[msg.sender].sum += rank;
+        }
     }
 
     function checkHand() public view returns (Card[] memory) {
         return Players[msg.sender].hand;
-    }
-
-    function handSize() public view returns (uint256 size) {
-        return Players[msg.sender].size;
     }
 
     function totalSum(address player) public view returns (uint256 sum) {
@@ -191,7 +199,6 @@ contract Deck {
 
     function clearHand(address player) public {
         delete Players[player].hand;
-        Players[player].size = 0;
         Players[player].sum = 0;
     }
 
@@ -202,19 +209,22 @@ contract Deck {
             deck.length >= players.length * 2,
             "Not enough cards for all players"
         );
-        shuffle();
         for (uint256 i = 0; i < 2; i++) {
             for (uint256 j = 0; j < players.length; j++) {
                 (uint8 suit, uint8 rank) = drawCard();
                 Players[players[j]].hand.push(Card(suit, rank));
-
-                if (rank >= 10) {
+                if (rank == 1) {
+                    if (Players[players[j]].numAces == 1) {
+                        Players[players[j]].sum += 1;
+                    } else {
+                        Players[players[j]].sum += 11;
+                        Players[players[j]].numAces += 1;
+                    }
+                } else if (rank >= 10) {
                     Players[players[j]].sum += 10;
                 } else {
                     Players[players[j]].sum += rank;
                 }
-
-                Players[players[j]].size += 1;
             }
         }
         cardState = CardState.Idling;
