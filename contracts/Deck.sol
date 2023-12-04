@@ -12,7 +12,8 @@ contract Deck {
 
     enum PlayerState {
         beforeStand,
-        Stand
+        Stand,
+        BlackJack
     }
 
     enum CardState {
@@ -37,6 +38,7 @@ contract Deck {
     CardState public cardState;
     address public owner;
 
+    //Initialises the consumer that is required for the random number and initialize a deck.
     constructor(VRFv2Consumer vrfConsumerAddress) {
         vrfConsumer = vrfConsumerAddress;
         for (uint8 suit = 1; suit <= 4; suit++) {
@@ -48,6 +50,7 @@ contract Deck {
         owner = msg.sender;
     }
 
+    //Initialize the players required.
     function initializePlayers(address[] memory playerAddresses) public {
         for (uint256 i = 0; i < playerAddresses.length; i++) {
             address playerAddress = playerAddresses[i];
@@ -57,6 +60,7 @@ contract Deck {
         }
     }
 
+    //Shuffle cards based on Fisher-Yates Algorithm.
     function shuffle() public {
         uint256 deckSize = deck.length;
         cardState = CardState.Shuffling;
@@ -70,11 +74,23 @@ contract Deck {
         }
     }
 
+    //To make sure that all the cards are back in the deck
+    function refreshDeck() public {
+        delete deck;
+        for (uint8 suit = 1; suit <= 4; suit++) {
+            for (uint8 rank = 1; rank <= 13; rank++) {
+                deck.push(Card(suit, rank));
+            }
+        }
+    }
+
+    //Generates a request from Chainlink
     function generateDrawRequest() private {
         uint256 requestId = vrfConsumer.requestRandomWords();
         requestID = requestId;
     }
 
+    //Draw card that will be used for distribute cards function, no address is assigned here as opposed to drawCardFromDeck()
     function drawCard() public returns (uint8 suit, uint8 rank) {
         require(deck.length > 0, "No cards left in the deck");
         Card memory drawnCard = deck[deck.length - 1];
@@ -95,6 +111,49 @@ contract Deck {
         return (suit, rank);
     }
 
+    function drawCardDouble(address player) public {
+        require(deck.length > 0, "No cards left in the deck");
+        Card memory drawnCard = deck[deck.length - 1];
+        (string memory first, string memory second) = splitString(
+            randomNumbersString
+        );
+        uint8 index = stringToUint8(first);
+        if (index > deck.length) {
+            index = uint8(index % deck.length);
+        }
+        randomNumbersString = second;
+        Card memory swap = deck[index];
+        deck[index] = drawnCard;
+        deck[deck.length - 1] = swap;
+        uint8 suit = swap.suit;
+        uint8 rank = swap.rank;
+        deck.pop();
+        Players[player].hand.push(Card(suit, rank));
+        Players[player].currentState = PlayerState.Stand;
+        if (
+            Players[msg.sender].numAces >= 1 &&
+            Players[msg.sender].sum + rank > 21
+        ) {
+            Players[msg.sender].sum -= 10;
+            Players[msg.sender].numAces -= 1;
+        }
+        if (rank == 1) {
+            if (Players[msg.sender].numAces >= 1) {
+                Players[msg.sender].sum += 1;
+                Players[msg.sender].numAces -= 1;
+            } else {
+                Players[msg.sender].sum += 11;
+                Players[msg.sender].numAces += 1;
+            }
+        } else if (rank >= 10) {
+            rank = 10;
+            Players[msg.sender].sum += rank;
+        } else {
+            Players[msg.sender].sum += rank;
+        }
+    }
+
+    //Assigns the fulfilled request to the string
     function fulfillDrawRequest() public {
         (bool fulfilled, uint256[] memory randomWords) = vrfConsumer
             .getRequestStatus(requestID);
@@ -106,6 +165,12 @@ contract Deck {
         randomNumbersString = Strings.toString(randomNumber);
     }
 
+    //Returns size of the deck, this helps ensure that deck is refreshed.
+    function size() public view returns (uint256 length) {
+        return deck.length;
+    }
+
+    //Splits the string so that we can use it for the swapping algorithm.
     function splitString(string memory str)
         private
         pure
@@ -144,6 +209,7 @@ contract Deck {
         return result;
     }
 
+    //Draws a card that is directed to a particular address
     function drawFromDeck() public returns (uint8 suit, uint8 rank) {
         require(
             Players[msg.sender].currentState == PlayerState.beforeStand,
@@ -193,6 +259,10 @@ contract Deck {
         return Players[msg.sender].hand;
     }
 
+    function getState(address player) public view returns (PlayerState) {
+        return Players[player].currentState;
+    }
+
     function totalSum(address player) public view returns (uint256 sum) {
         return Players[player].sum;
     }
@@ -219,15 +289,27 @@ contract Deck {
                     } else {
                         Players[players[j]].sum += 11;
                         Players[players[j]].numAces += 1;
+                        if (Players[players[j]].sum == 21) {
+                            Players[players[j]].currentState = PlayerState
+                                .BlackJack;
+                        }
                     }
                 } else if (rank >= 10) {
                     Players[players[j]].sum += 10;
+                    if (Players[players[j]].sum == 21) {
+                        Players[players[j]].currentState = PlayerState
+                            .BlackJack;
+                    }
                 } else {
                     Players[players[j]].sum += rank;
                 }
             }
         }
         cardState = CardState.Idling;
+    }
+
+    function beforeStand(address player) public {
+        Players[player].currentState = PlayerState.beforeStand;
     }
 
     function stand() public {
@@ -242,8 +324,12 @@ contract Deck {
         return cardState; // Query current card state
     }
 
-    function showDealerFirst() public view returns (Card memory) {
-        return Players[owner].hand[0];
+    function showDealerFirst(address players)
+        public
+        view
+        returns (Card memory)
+    {
+        return Players[players].hand[0];
     }
 
     function showDealerCards() public view returns (Card[] memory) {
