@@ -16,16 +16,17 @@ contract BlockJackCasino {
         uint256 minimumBet;
         GamblingState gamblingState;
     }
+
     Deck deckContract;
     BlockJackToken blockJackTokenContract;
     mapping(uint256 => Table) public tables;
-    address payable dealerAddress;
+    address public dealerAddress;
 
     constructor(Deck deckContractAddress, BlockJackToken blockJackTokenAddress)
     {
         deckContract = deckContractAddress;
         blockJackTokenContract = blockJackTokenAddress;
-        dealerAddress = payable(msg.sender);
+        dealerAddress = msg.sender;
     }
 
     event buyCredit(uint256 amount); //buying token for BlockJack
@@ -33,15 +34,24 @@ contract BlockJackCasino {
         address indexed winner,
         uint256 amount,
         uint256 winnerSum,
-        uint256 loserSum
+        uint256 loserSum,
+        string message
     );
     event dealerWon(
         address indexed loser,
         uint256 amount,
         uint256 winnerSum,
-        uint256 loserSum
+        uint256 loserSum,
+        string message
     );
-    event dealerBlow(uint256 count);
+    event dealerDraw(
+        address indexed winner,
+        uint256 amount,
+        uint256 winnerSum,
+        uint256 loserSum,
+        string message
+    );
+    event dealerBlow(uint256 count, string message);
 
     function getBJT() public payable {
         //check BJT
@@ -86,6 +96,11 @@ contract BlockJackCasino {
         return tables[table].players.length;
     }
 
+    function double(uint256 tableNumber) public {
+        deckContract.drawCardDouble(msg.sender);
+        tables[tableNumber].playerBets[msg.sender] *= 2;
+    }
+
     function joinTable(uint256 table) public {
         //join table
         uint256 playersOnTable = getTableSize(table);
@@ -98,6 +113,7 @@ contract BlockJackCasino {
             "You cannot join a table that is in game."
         );
         uint256 minimumBet = getMinimumBet(table);
+        require(minimumBet > 0, "Owner has not set the minimum bet");
         uint256 playerWallet = checkBJT();
         require(
             minimumBet <= playerWallet,
@@ -134,34 +150,90 @@ contract BlockJackCasino {
         deckContract.distributeCards(tables[table].players);
     }
 
+    function checkStatus(uint256 table) public view returns (bool check) {
+        uint256 players = getTableSize(table);
+        for (uint256 i = 0; i < players; i++) {
+            Deck.PlayerState state = deckContract.getState(
+                tables[table].players[i]
+            );
+            if (state == Deck.PlayerState.beforeStand) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     function endGamble(uint256 table) public {
+        require(checkStatus(table), "Table not ready for further processing");
         require(msg.sender == dealerAddress, "Only dealers can end gamble.");
         tables[table].gamblingState = GamblingState.NotGambling;
         uint256 sum = deckContract.totalSum(dealerAddress);
         uint256 players = getTableSize(table);
         uint256 minimumBet = getMinimumBet(table);
         for (uint256 i = 0; i < players; i++) {
+            uint256 maxBetAmount = 0;
             uint256 playerValue = deckContract.totalSum(
+                tables[table].players[i]
+            );
+            Deck.PlayerState state = deckContract.getState(
                 tables[table].players[i]
             );
             address player = tables[table].players[i];
             uint256 betAmount = tables[table].playerBets[player];
-            uint256 maxBetAmount = betAmount > minimumBet
-                ? betAmount
-                : minimumBet;
-            if (sum > 21 && tables[table].players[i] != dealerAddress) {
-                //dealer lose
+            maxBetAmount = betAmount > minimumBet ? betAmount : minimumBet;
+            //Player and Dealer Blackjack
+            if (
+                state == Deck.PlayerState.BlackJack &&
+                Deck.PlayerState.BlackJack ==
+                deckContract.getState(dealerAddress)
+            ) {
                 blockJackTokenContract.transferCredit(
                     tables[table].players[i],
                     maxBetAmount
                 );
                 deckContract.clearHand(tables[table].players[i]);
-                emit dealerBlow(sum);
-            } else if (
+                deckContract.beforeStand(tables[table].players[i]);
+            }
+            //Blackjack case
+            else if (
+                state == Deck.PlayerState.BlackJack &&
+                tables[table].players[i] != dealerAddress
+            ) {
+                maxBetAmount = (maxBetAmount * 3) / 2;
+                blockJackTokenContract.transferCredit(
+                    tables[table].players[i],
+                    maxBetAmount
+                );
+                deckContract.beforeStand(tables[table].players[i]);
+            }
+            //Player and Dealer Blow
+            else if (playerValue > 21 && sum > 21) {
+                blockJackTokenContract.transferCredit(
+                    tables[table].players[i],
+                    maxBetAmount
+                );
+                deckContract.clearHand(tables[table].players[i]);
+                emit dealerBlow(sum, "Dealer Blow");
+                deckContract.beforeStand(tables[table].players[i]);
+            }
+            //Dealer Blow
+            else if (sum > 21 && tables[table].players[i] != dealerAddress) {
+                maxBetAmount *= 2;
+                blockJackTokenContract.transferCredit(
+                    tables[table].players[i],
+                    maxBetAmount
+                );
+                deckContract.clearHand(tables[table].players[i]);
+                emit dealerBlow(sum, "Dealer Blow");
+                deckContract.beforeStand(tables[table].players[i]);
+            }
+            // Dealer lose
+            else if (
                 tables[table].players[i] != dealerAddress &&
                 playerValue > sum &&
                 sum <= 21
             ) {
+                maxBetAmount *= 2;
                 blockJackTokenContract.transferCredit(
                     tables[table].players[i],
                     maxBetAmount
@@ -171,21 +243,41 @@ contract BlockJackCasino {
                     tables[table].players[i],
                     maxBetAmount,
                     playerValue,
-                    sum
+                    sum,
+                    "Dealer Lost"
                 );
-            } else if (
-                tables[table].players[i] != dealerAddress && sum != playerValue
+                deckContract.beforeStand(tables[table].players[i]);
+            }
+            //Player lose
+            else if (
+                tables[table].players[i] != dealerAddress &&
+                sum > playerValue &&
+                sum <= 21
             ) {
                 emit dealerWon(
                     tables[table].players[i],
                     maxBetAmount,
                     sum,
-                    playerValue
+                    playerValue,
+                    "Dealer Won"
                 );
                 deckContract.clearHand(tables[table].players[i]);
+                deckContract.beforeStand(tables[table].players[i]);
+            }
+            //Player and Dealer Draw
+            else if (playerValue == sum && sum <= 21 &&  tables[table].players[i] != dealerAddress ) {
+                emit dealerDraw(
+                    tables[table].players[i],
+                    maxBetAmount,
+                    playerValue,
+                    sum,
+                    "Dealer Draw"
+                );
+                deckContract.beforeStand(tables[table].players[i]);
             }
         }
         deckContract.clearHand(dealerAddress);
         tables[table].players = new address[](0);
+        deckContract.beforeStand(dealerAddress);
     }
 }
