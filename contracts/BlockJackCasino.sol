@@ -266,6 +266,10 @@ contract BlockJackCasino {
                     sum,
                     "Dealer Draw"
                 );
+                 blockJackTokenContract.transferCredit(
+                    player,
+                    maxBetAmount
+                );
             }
             deckContract.beforeStand(player);
             deckContract.clearHand(player);
