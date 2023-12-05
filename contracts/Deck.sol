@@ -37,6 +37,7 @@ contract Deck {
     mapping(address => Player) public Players;
     CardState public cardState;
     address public owner;
+    address[] public Addresses;
 
     //Initialises the consumer that is required for the random number and initialize a deck.
     constructor(VRFv2Consumer vrfConsumerAddress) {
@@ -57,6 +58,7 @@ contract Deck {
             Players[playerAddress].player = playerAddress;
             Players[playerAddress].sum = 0;
             Players[playerAddress].currentState = PlayerState.beforeStand;
+            Addresses.push(playerAddress);
         }
     }
 
@@ -130,26 +132,23 @@ contract Deck {
         deck.pop();
         Players[player].hand.push(Card(suit, rank));
         Players[player].currentState = PlayerState.Stand;
-        if (
-            Players[msg.sender].numAces >= 1 &&
-            Players[msg.sender].sum + rank > 21
-        ) {
-            Players[msg.sender].sum -= 10;
-            Players[msg.sender].numAces -= 1;
+        if (Players[player].numAces >= 1 && Players[player].sum + rank > 21) {
+            Players[player].sum -= 10;
+            Players[player].numAces -= 1;
         }
         if (rank == 1) {
-            if (Players[msg.sender].numAces >= 1) {
-                Players[msg.sender].sum += 1;
-                Players[msg.sender].numAces -= 1;
+            if (Players[player].numAces >= 1) {
+                Players[player].sum += 1;
+                Players[player].numAces -= 1;
             } else {
-                Players[msg.sender].sum += 11;
-                Players[msg.sender].numAces += 1;
+                Players[player].sum += 11;
+                Players[player].numAces += 1;
             }
         } else if (rank >= 10) {
             rank = 10;
-            Players[msg.sender].sum += rank;
+            Players[player].sum += rank;
         } else {
-            Players[msg.sender].sum += rank;
+            Players[player].sum += rank;
         }
     }
 
@@ -332,7 +331,18 @@ contract Deck {
         return Players[players].hand[0];
     }
 
+    function checkState() public view returns (bool) {
+        for (uint256 i = 0; i < Addresses.length; i++) {
+            address player = Addresses[i];
+            if (Players[player].currentState == PlayerState.beforeStand) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     function showDealerCards() public view returns (Card[] memory) {
+        require(checkState(), "Not everyone is in stand");
         return Players[owner].hand;
     }
 }
