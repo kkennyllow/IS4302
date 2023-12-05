@@ -19,7 +19,7 @@ contract BlockJackCasino {
 
     Deck deckContract;
     BlockJackToken blockJackTokenContract;
-    mapping(uint256 => Table) public tables;
+    Table public gamblingTable;
     address public dealerAddress;
 
     constructor(Deck deckContractAddress, BlockJackToken blockJackTokenAddress)
@@ -52,6 +52,7 @@ contract BlockJackCasino {
         string message
     );
     event dealerBlow(uint256 count, string message);
+    event BlackJack(string message);
 
     function getBJT() public payable {
         //check BJT
@@ -68,93 +69,107 @@ contract BlockJackCasino {
         return credits;
     }
 
-    function setMinimumBet(uint256 table, uint256 minimumBet) public {
+    function setMinimumBet(uint256 minimumBet) public {
         //set minimum bet which can only be done by the owner of the contract
         require(
             msg.sender == dealerAddress,
             "Only dealers can set Minimum Bet."
         );
-        tables[table].minimumBet = minimumBet;
+        gamblingTable.minimumBet = minimumBet;
     }
 
-    function getMinimumBet(uint256 table) public view returns (uint256) {
-        return tables[table].minimumBet;
+    function getMinimumBet() public view returns (uint256) {
+        return gamblingTable.minimumBet;
     }
 
-    function increaseBet(uint256 betAmount, uint256 table) public {
+    function increaseBet(uint256 betAmount) public {
+        require(gamblingTable.gamblingState == GamblingState.NotGambling, "You cannot increase your bet in the middle of a game");
         uint256 BJT = checkBJT();
         require(
             BJT >= betAmount,
             "You do not have enough tokens to increase bet."
         );
-        tables[table].playerBets[msg.sender] += betAmount;
+        gamblingTable.playerBets[msg.sender] += betAmount;
         blockJackTokenContract.transferCredit(dealerAddress, betAmount);
     }
 
-    function getTableSize(uint256 table) public view returns (uint256) {
+    function getBet() public view returns (uint256 betAmount) {
+        return gamblingTable.playerBets[msg.sender];
+    }
+
+    function getTableSize() public view returns (uint256) {
         //get Number of Players
-        return tables[table].players.length;
+        return gamblingTable.players.length;
     }
 
-    function double(uint256 tableNumber) public {
+    function double() public {
         deckContract.drawCardDouble(msg.sender);
-        tables[tableNumber].playerBets[msg.sender] *= 2;
+        gamblingTable.playerBets[msg.sender] *= 2;
     }
 
-    function joinTable(uint256 table) public {
-        //join table
-        uint256 playersOnTable = getTableSize(table);
+    //join table
+    function joinTable() public {
+        require(
+            msg.sender != dealerAddress,
+            "Dealer cannot join table, start gamble instead"
+        );
+        uint256 playersOnTable = getTableSize();
         require(
             playersOnTable + 1 <= 7,
             "Too many players are at this table. Pick another table."
         );
         require(
-            tables[table].gamblingState == GamblingState.NotGambling,
+            gamblingTable.gamblingState == GamblingState.NotGambling,
             "You cannot join a table that is in game."
         );
-        uint256 minimumBet = getMinimumBet(table);
+        uint256 minimumBet = getMinimumBet();
         require(minimumBet > 0, "Owner has not set the minimum bet");
         uint256 playerWallet = checkBJT();
         require(
             minimumBet <= playerWallet,
             "You have too little tokens to join this table."
         );
-        tables[table].players.push(msg.sender);
-        tables[table].playerBets[msg.sender] = minimumBet;
+        gamblingTable.players.push(msg.sender);
+        gamblingTable.playerBets[msg.sender] = minimumBet;
         blockJackTokenContract.transferCredit(dealerAddress, minimumBet);
     }
 
-    function leaveTable(uint256 table) public {
+    function leaveTable() public {
         require(
-            tables[table].gamblingState == GamblingState.NotGambling,
+            gamblingTable.gamblingState == GamblingState.NotGambling,
             "You cannot leave a table when it is in game."
         );
-        uint256 length = getTableSize(table);
+        uint256 length = getTableSize();
         uint256 index = 0;
         for (uint256 i = 0; i < length; i++) {
-            if (tables[table].players[i] == msg.sender) {
+            if (gamblingTable.players[i] == msg.sender) {
                 index = i;
             }
         }
-        tables[table].players[index] = tables[table].players[length - 1];
-        tables[table].players.pop();
+        gamblingTable.players[index] = gamblingTable.players[length - 1];
+        gamblingTable.players.pop();
+        gamblingTable.playerBets[msg.sender] = 0;
     }
 
-    function gamble(uint256 table) public {
+    function gamble() public {
         require(
             msg.sender == dealerAddress,
             "Only dealers can initiate Gamble."
         );
-        tables[table].gamblingState = GamblingState.NotGambling;
-        tables[table].players.push(msg.sender);
-        deckContract.distributeCards(tables[table].players);
+        require(
+            gamblingTable.gamblingState == GamblingState.NotGambling,
+            "Gambling is in progress"
+        );
+        gamblingTable.gamblingState = GamblingState.Gambling;
+        gamblingTable.players.push(msg.sender);
+        deckContract.distributeCards(gamblingTable.players);
     }
 
-    function checkStatus(uint256 table) public view returns (bool check) {
-        uint256 players = getTableSize(table);
+    function checkStatus() public view returns (bool check) {
+        uint256 players = getTableSize();
         for (uint256 i = 0; i < players; i++) {
             Deck.PlayerState state = deckContract.getState(
-                tables[table].players[i]
+                gamblingTable.players[i]
             );
             if (state == Deck.PlayerState.beforeStand) {
                 return false;
@@ -163,121 +178,101 @@ contract BlockJackCasino {
         return true;
     }
 
-    function endGamble(uint256 table) public {
-        require(checkStatus(table), "Table not ready for further processing");
+    function endGamble() public {
+        require(checkStatus(), "Table not ready for further processing");
         require(msg.sender == dealerAddress, "Only dealers can end gamble.");
-        tables[table].gamblingState = GamblingState.NotGambling;
+        gamblingTable.gamblingState = GamblingState.NotGambling;
         uint256 sum = deckContract.totalSum(dealerAddress);
-        uint256 players = getTableSize(table);
-        uint256 minimumBet = getMinimumBet(table);
+        uint256 players = getTableSize();
+        uint256 minimumBet = getMinimumBet();
         for (uint256 i = 0; i < players; i++) {
             uint256 maxBetAmount = 0;
             uint256 playerValue = deckContract.totalSum(
-                tables[table].players[i]
+                gamblingTable.players[i]
             );
             Deck.PlayerState state = deckContract.getState(
-                tables[table].players[i]
+                gamblingTable.players[i]
             );
-            address player = tables[table].players[i];
-            uint256 betAmount = tables[table].playerBets[player];
+            address player = gamblingTable.players[i];
+            uint256 betAmount = gamblingTable.playerBets[player];
             maxBetAmount = betAmount > minimumBet ? betAmount : minimumBet;
             //Player and Dealer Blackjack
             if (
                 state == Deck.PlayerState.BlackJack &&
                 Deck.PlayerState.BlackJack ==
-                deckContract.getState(dealerAddress)
+                deckContract.getState(dealerAddress) && player != dealerAddress
             ) {
                 blockJackTokenContract.transferCredit(
-                    tables[table].players[i],
+                    player,
                     maxBetAmount
                 );
-                deckContract.clearHand(tables[table].players[i]);
-                deckContract.beforeStand(tables[table].players[i]);
+                emit BlackJack("Player and Dealer Blackjack");
             }
             //Blackjack case
             else if (
-                state == Deck.PlayerState.BlackJack &&
-                tables[table].players[i] != dealerAddress
+                state == Deck.PlayerState.BlackJack && player != dealerAddress
             ) {
                 maxBetAmount = (maxBetAmount * 3) / 2;
-                blockJackTokenContract.transferCredit(
-                    tables[table].players[i],
-                    maxBetAmount
-                );
-                deckContract.beforeStand(tables[table].players[i]);
+                blockJackTokenContract.transferCredit(player, maxBetAmount);
+                emit BlackJack("Player Blackjack");
             }
             //Player and Dealer Blow
-            else if (playerValue > 21 && sum > 21) {
-                blockJackTokenContract.transferCredit(
-                    tables[table].players[i],
-                    maxBetAmount
-                );
-                deckContract.clearHand(tables[table].players[i]);
+            else if (playerValue > 21 && sum > 21 && player != dealerAddress) {
+                blockJackTokenContract.transferCredit(player, maxBetAmount);
                 emit dealerBlow(sum, "Dealer Blow");
-                deckContract.beforeStand(tables[table].players[i]);
             }
             //Dealer Blow
-            else if (sum > 21 && tables[table].players[i] != dealerAddress) {
+            else if (sum > 21 && player != dealerAddress) {
                 maxBetAmount *= 2;
-                blockJackTokenContract.transferCredit(
-                    tables[table].players[i],
-                    maxBetAmount
-                );
-                deckContract.clearHand(tables[table].players[i]);
+                blockJackTokenContract.transferCredit(player, maxBetAmount);
                 emit dealerBlow(sum, "Dealer Blow");
-                deckContract.beforeStand(tables[table].players[i]);
             }
             // Dealer lose
             else if (
-                tables[table].players[i] != dealerAddress &&
-                playerValue > sum &&
-                sum <= 21
+                player != dealerAddress && playerValue > sum && sum <= 21
             ) {
                 maxBetAmount *= 2;
-                blockJackTokenContract.transferCredit(
-                    tables[table].players[i],
-                    maxBetAmount
-                );
-                deckContract.clearHand(tables[table].players[i]);
+                blockJackTokenContract.transferCredit(player, maxBetAmount);
                 emit dealerLost(
-                    tables[table].players[i],
+                    player,
                     maxBetAmount,
                     playerValue,
                     sum,
                     "Dealer Lost"
                 );
-                deckContract.beforeStand(tables[table].players[i]);
             }
             //Player lose
             else if (
-                tables[table].players[i] != dealerAddress &&
-                sum > playerValue &&
-                sum <= 21
+                player != dealerAddress && sum > playerValue && sum <= 21
             ) {
                 emit dealerWon(
-                    tables[table].players[i],
+                    player,
                     maxBetAmount,
                     sum,
                     playerValue,
                     "Dealer Won"
                 );
-                deckContract.clearHand(tables[table].players[i]);
-                deckContract.beforeStand(tables[table].players[i]);
             }
             //Player and Dealer Draw
-            else if (playerValue == sum && sum <= 21 &&  tables[table].players[i] != dealerAddress ) {
+            else if (
+                playerValue == sum &&
+                sum <= 21 &&
+                player != dealerAddress
+            ) {
                 emit dealerDraw(
-                    tables[table].players[i],
+                    player,
                     maxBetAmount,
                     playerValue,
                     sum,
                     "Dealer Draw"
                 );
-                deckContract.beforeStand(tables[table].players[i]);
             }
+            deckContract.beforeStand(player);
+            deckContract.clearHand(player);
+            gamblingTable.playerBets[player] = 0;
         }
         deckContract.clearHand(dealerAddress);
-        tables[table].players = new address[](0);
+        gamblingTable.players = new address[](0);
         deckContract.beforeStand(dealerAddress);
     }
 }
