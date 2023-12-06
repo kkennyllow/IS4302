@@ -38,6 +38,10 @@ contract Deck {
     CardState public cardState;
     address public owner;
     address[] public Addresses;
+    mapping(address => uint256) private lastActionTime;
+    uint256 public constant ACTION_COOLDOWN = 2 seconds; 
+
+
 
     //Initialises the consumer that is required for the random number and initialize a deck.
     constructor(VRFv2Consumer vrfConsumerAddress) {
@@ -49,6 +53,10 @@ contract Deck {
         }
         generateDrawRequest();
         owner = msg.sender;
+    }
+
+    function isRateLimited(address user) public view returns (bool) {
+        return block.timestamp < lastActionTime[user] + ACTION_COOLDOWN;
     }
 
     //Initialize the players required.
@@ -64,6 +72,8 @@ contract Deck {
 
     //Shuffle cards based on Fisher-Yates Algorithm.
     function shuffle() public {
+        require(!isRateLimited(msg.sender), "Action rate limited");
+        lastActionTime[msg.sender] = block.timestamp;  
         uint256 deckSize = deck.length;
         cardState = CardState.Shuffling;
         for (uint256 i = 0; i < deckSize; i++) {
@@ -210,6 +220,8 @@ contract Deck {
 
     //Draws a card that is directed to a particular address
     function drawFromDeck() public returns (uint8 suit, uint8 rank) {
+        require(!isRateLimited(msg.sender), "Action rate limited");
+        lastActionTime[msg.sender] = block.timestamp;  
         require(
             Players[msg.sender].currentState == PlayerState.beforeStand,
             "You cannot draw anymore cards."
