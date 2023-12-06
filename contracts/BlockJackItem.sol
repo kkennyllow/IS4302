@@ -2,21 +2,22 @@
 pragma solidity ^0.8.20;
 
 import "@openzeppelin/contracts/token/ERC721/extensions/ERC721URIStorage.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
 
-contract BlockJackItem is ERC721URIStorage {
+contract BlockJackItem is ERC721URIStorage, Ownable {
     uint256 private _currentTokenId = 0;
-    address public owner;
+    address public ownerAddress;
 
-    constructor() ERC721("BlockJack Item", "BJI") {
-        owner = msg.sender;
+    constructor() ERC721("BlockJack Item", "BJI") Ownable(msg.sender) {
+        ownerAddress = msg.sender;
     }
 
-    modifier onlyOwner() {
-        require(msg.sender == owner, "Only the owner can perform this action");
+    modifier onlyAdmin() {
+        require(owner() == _msgSender(), "Only admin can call this function");
         _;
     }
 
-    function mintTo(address recipient, string memory metadataURI) public onlyOwner returns (uint256) {
+    function mintTo(address recipient, string memory metadataURI) public onlyAdmin returns (uint256) {
         uint256 newItemId = _getNextTokenId();
         _mint(recipient, newItemId);
         _setTokenURI(newItemId, metadataURI);
@@ -24,10 +25,6 @@ contract BlockJackItem is ERC721URIStorage {
         return newItemId;
     }
 
-    function transferOwnership(address newOwner) public onlyOwner {
-        require(newOwner != address(0), "New owner cannot be the zero address");
-        owner = newOwner;
-    }
 
     function _getNextTokenId() private view returns (uint256) {
         return _currentTokenId + 1;
@@ -37,5 +34,4 @@ contract BlockJackItem is ERC721URIStorage {
         _currentTokenId++;
     }
 
-    // Additional functions can be implemented as needed.
 }
