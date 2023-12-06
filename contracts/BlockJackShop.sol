@@ -12,20 +12,33 @@ contract BlockjackShop {
 
     mapping(uint256 => uint256) public itemPrices;  // itemId => price
     mapping(uint256 => address) public itemOwners;  // itemId => owner
+    mapping(address => uint256) private lastActionTime;
+    uint256 public constant ACTION_COOLDOWN = 2 seconds; 
+
+    event ItemListed(uint256 indexed itemId, address indexed owner, uint256 price);
+    event ItemPurchased(uint256 indexed itemId, address indexed buyer, uint256 price);
+
 
     constructor(address _blockJackItemAddress, address _blockJackTokenAddress) {
         blockJackItemContract = BlockJackItem(_blockJackItemAddress);
         blockJackTokenContract = BlockJackToken(_blockJackTokenAddress);
     }
 
+    function isRateLimited(address user) public view returns (bool) {
+        return block.timestamp < lastActionTime[user] + ACTION_COOLDOWN;
+    }
+
     function listItem(uint256 itemId, uint256 price) public {
         require(msg.sender == blockJackItemContract.ownerOf(itemId), "Not the item owner");
         itemPrices[itemId] = price;
         itemOwners[itemId] = msg.sender;
-        // Emit event for item listing
+        emit ItemListed(itemId, msg.sender, price);
     }
+    
 
     function buyItem(uint256 itemId) public {
+        require(!isRateLimited(msg.sender), "Action rate limited");
+        lastActionTime[msg.sender] = block.timestamp;  
         uint256 price = itemPrices[itemId];
         require(price > 0, "Item not for sale");
         require(blockJackTokenContract.checkCredit(msg.sender) >= price, "Insufficient balance");
@@ -35,8 +48,6 @@ contract BlockjackShop {
 
         itemPrices[itemId] = 0;  // Item no longer for sale
         itemOwners[itemId] = address(0);
-        // Emit event for item purchase
+        emit ItemPurchased(itemId, msg.sender, price);
     }
-
-    // Additional functions like getItemPrice, removeListing, etc.
 }
