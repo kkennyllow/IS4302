@@ -307,5 +307,6 @@ contract BlockJackCasino is Ownable {
         deckContract.clearHand(dealerAddress);
         gamblingTable.players = new address[](0);
         deckContract.beforeStand(dealerAddress);
+        deckContract.refreshDeck();
     }
 }
