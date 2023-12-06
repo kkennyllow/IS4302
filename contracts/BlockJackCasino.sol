@@ -2,8 +2,9 @@
 pragma solidity ^0.8.20;
 import "./Deck.sol";
 import "./BlockJackToken.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
 
-contract BlockJackCasino {
+contract BlockJackCasino is Ownable {
     enum GamblingState {
         NotGambling,
         Gambling
@@ -22,7 +23,7 @@ contract BlockJackCasino {
     Table public gamblingTable;
     address public dealerAddress;
 
-    constructor(Deck deckContractAddress, BlockJackToken blockJackTokenAddress)
+    constructor(Deck deckContractAddress, BlockJackToken blockJackTokenAddress) Ownable(msg.sender)
     {
         deckContract = deckContractAddress;
         blockJackTokenContract = blockJackTokenAddress;
@@ -54,6 +55,11 @@ contract BlockJackCasino {
     event dealerBlow(uint256 count, string message);
     event BlackJack(string message);
 
+    modifier onlyDealer() {
+        require(owner() == _msgSender(), "Only dealers can call this function");
+        _;
+    }
+
     function getBJT() public payable {
         //check BJT
         uint256 amount = blockJackTokenContract.getCredit(
@@ -69,12 +75,7 @@ contract BlockJackCasino {
         return credits;
     }
 
-    function setMinimumBet(uint256 minimumBet) public {
-        //set minimum bet which can only be done by the owner of the contract
-        require(
-            msg.sender == dealerAddress,
-            "Only dealers can set Minimum Bet."
-        );
+    function setMinimumBet(uint256 minimumBet) public onlyDealer {
         gamblingTable.minimumBet = minimumBet;
     }
 
@@ -151,11 +152,7 @@ contract BlockJackCasino {
         gamblingTable.playerBets[msg.sender] = 0;
     }
 
-    function gamble() public {
-        require(
-            msg.sender == dealerAddress,
-            "Only dealers can initiate Gamble."
-        );
+    function gamble() public onlyDealer {
         require(
             gamblingTable.gamblingState == GamblingState.NotGambling,
             "Gambling is in progress"
@@ -178,9 +175,8 @@ contract BlockJackCasino {
         return true;
     }
 
-    function endGamble() public {
+    function endGamble() public onlyDealer {
         require(checkStatus(), "Table not ready for further processing");
-        require(msg.sender == dealerAddress, "Only dealers can end gamble.");
         gamblingTable.gamblingState = GamblingState.NotGambling;
         uint256 sum = deckContract.totalSum(dealerAddress);
         uint256 players = getTableSize();
