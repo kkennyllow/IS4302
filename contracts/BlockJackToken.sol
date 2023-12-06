@@ -7,6 +7,8 @@ contract BlockJackToken {
     address owner;
 
     //1 BlockJackToken cost 0.0001 ETH
+    mapping(address => uint256) private lastActionTime;
+    uint256 public constant ACTION_COOLDOWN = 2 seconds; 
 
     constructor() {
         ERC20 e = new ERC20();
@@ -14,10 +16,16 @@ contract BlockJackToken {
         owner = msg.sender;
     }
 
+    function isRateLimited(address user) public view returns (bool) {
+        return block.timestamp < lastActionTime[user] + ACTION_COOLDOWN;
+    }
+
     function getCredit(
         address recipient,
         uint256 weiAmt
     ) public returns (uint256) {
+        require(!isRateLimited(msg.sender), "Action rate limited");
+        lastActionTime[msg.sender] = block.timestamp;   
         uint256 amt = weiAmt / (1000000000000000000 / 10000); // Convert weiAmt to BlockJackToken
         erc20Contract.mint(recipient, amt);
         return amt;
@@ -29,13 +37,15 @@ contract BlockJackToken {
     }
 
     function transferCredit(address recipient, uint256 amt) public {
+        require(!isRateLimited(msg.sender), "Action rate limited");
+        lastActionTime[msg.sender] = block.timestamp;   
         erc20Contract.transfer(recipient, amt);
     }
 
     function cashOut() public {
         uint256 credit = checkCredit(msg.sender);
         transferCredit(owner, credit);
-        uint256 amountInWei = credit * (1000000000000000000 / 10000);
+        uint256 amountInWei = credit / (1000000000000000000 / 10000);
         payable(msg.sender).transfer(amountInWei);
     }
 }
