@@ -35,7 +35,7 @@ contract BlockJackToken {
     function cashOut() public {
         uint256 credit = checkCredit(msg.sender);
         transferCredit(owner, credit);
-        uint256 amountInWei = credit / (1000000000000000000 / 10000);
+        uint256 amountInWei = credit * (1000000000000000000 / 10000);
         payable(msg.sender).transfer(amountInWei);
     }
 }
