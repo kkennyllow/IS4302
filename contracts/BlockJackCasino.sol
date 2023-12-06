@@ -99,17 +99,17 @@ contract BlockJackCasino is Ownable {
 
     // Players commit their bet as a hash (only used if increasing bet)
     function commitIncreaseBet(bytes32 hashCommitment) public {
-        require(gamblingTable.gamblingState == GamblingState.NotGambling, "Betting phase is over");
         require(!isRateLimited(msg.sender), "Action rate limited");
+        require(gamblingTable.gamblingState == GamblingState.NotGambling, "Betting phase is over");
         lastActionTime[msg.sender] = block.timestamp;   
         commitments[msg.sender] = hashCommitment;
     }
 
     // Players reveal their bet (only used if increasing bet)
     function revealIncreaseBet(uint256 betAmount, uint256 nonce) public {
+        require(!isRateLimited(msg.sender), "Action rate limited");
         require(commitments[msg.sender] != 0, "No commitment found");
         require(keccak256(abi.encodePacked(betAmount, nonce)) == commitments[msg.sender], "Bet does not match commitment");
-        require(!isRateLimited(msg.sender), "Action rate limited");
         lastActionTime[msg.sender] = block.timestamp;   
         revealedBets[msg.sender] = betAmount;
         commitments[msg.sender] = 0; // Reset commitment
