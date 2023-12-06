@@ -23,6 +23,12 @@ contract BlockJackCasino is Ownable {
     Table public gamblingTable;
     address public dealerAddress;
 
+    mapping(address => bytes32) private commitments;
+    mapping(address => uint256) public revealedBets;
+    mapping(address => uint256) private lastActionTime;
+
+    uint256 public constant ACTION_COOLDOWN = 2 seconds; 
+
     constructor(Deck deckContractAddress, BlockJackToken blockJackTokenAddress) Ownable(msg.sender)
     {
         deckContract = deckContractAddress;
@@ -60,6 +66,10 @@ contract BlockJackCasino is Ownable {
         _;
     }
 
+    function isRateLimited(address user) public view returns (bool) {
+        return block.timestamp < lastActionTime[user] + ACTION_COOLDOWN;
+    }
+
     function getBJT() public payable {
         //check BJT
         uint256 amount = blockJackTokenContract.getCredit(
@@ -81,6 +91,29 @@ contract BlockJackCasino is Ownable {
 
     function getMinimumBet() public view returns (uint256) {
         return gamblingTable.minimumBet;
+    }
+
+    function createCommitment(uint256 betAmount, uint256 nonce) public pure returns (bytes32) {
+        return keccak256(abi.encodePacked(betAmount, nonce));
+    }
+
+    // Players commit their bet as a hash (only used if increasing bet)
+    function commitIncreaseBet(bytes32 hashCommitment) public {
+        require(gamblingTable.gamblingState == GamblingState.NotGambling, "Betting phase is over");
+        require(!isRateLimited(msg.sender), "Action rate limited");
+        lastActionTime[msg.sender] = block.timestamp;   
+        commitments[msg.sender] = hashCommitment;
+    }
+
+    // Players reveal their bet (only used if increasing bet)
+    function revealIncreaseBet(uint256 betAmount, uint256 nonce) public {
+        require(commitments[msg.sender] != 0, "No commitment found");
+        require(keccak256(abi.encodePacked(betAmount, nonce)) == commitments[msg.sender], "Bet does not match commitment");
+        require(!isRateLimited(msg.sender), "Action rate limited");
+        lastActionTime[msg.sender] = block.timestamp;   
+        revealedBets[msg.sender] = betAmount;
+        commitments[msg.sender] = 0; // Reset commitment
+        increaseBet(betAmount);
     }
 
     function increaseBet(uint256 betAmount) public {
@@ -274,6 +307,5 @@ contract BlockJackCasino is Ownable {
         deckContract.clearHand(dealerAddress);
         gamblingTable.players = new address[](0);
         deckContract.beforeStand(dealerAddress);
-        deckContract.refreshDeck();
     }
 }
