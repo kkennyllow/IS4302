@@ -39,19 +39,30 @@ contract Deck {
     address public owner;
     address[] public Addresses;
     mapping(address => uint256) private lastActionTime;
-    uint256 public constant ACTION_COOLDOWN = 2 seconds; 
-
-
+    uint256 public constant ACTION_COOLDOWN = 2 seconds;
 
     //Initialises the consumer that is required for the random number and initialize a deck.
-    constructor(VRFv2Consumer vrfConsumerAddress) {
-        vrfConsumer = vrfConsumerAddress;
+    // constructor(VRFv2Consumer vrfConsumerAddress) {
+    //     vrfConsumer = vrfConsumerAddress;
+    //     for (uint8 suit = 1; suit <= 4; suit++) {
+    //         for (uint8 rank = 1; rank <= 13; rank++) {
+    //             deck.push(Card(suit, rank));
+    //         }
+    //     }
+    //     generateDrawRequest();
+    //     owner = msg.sender;
+    // }
+
+    //Remove this
+    constructor() {
+        // vrfConsumer = vrfConsumerAddress;
         for (uint8 suit = 1; suit <= 4; suit++) {
             for (uint8 rank = 1; rank <= 13; rank++) {
                 deck.push(Card(suit, rank));
             }
         }
-        generateDrawRequest();
+        string memory randomnumber = "1231238921739821232119498";
+        randomNumbersString = randomnumber;
         owner = msg.sender;
     }
 
@@ -72,8 +83,6 @@ contract Deck {
 
     //Shuffle cards based on Fisher-Yates Algorithm.
     function shuffle() public {
-        require(!isRateLimited(msg.sender), "Action rate limited");
-        lastActionTime[msg.sender] = block.timestamp;  
         uint256 deckSize = deck.length;
         cardState = CardState.Shuffling;
         for (uint256 i = 0; i < deckSize; i++) {
@@ -97,13 +106,13 @@ contract Deck {
     }
 
     //Generates a request from Chainlink
-    function generateDrawRequest() private {
-        uint256 requestId = vrfConsumer.requestRandomWords();
-        requestID = requestId;
-    }
+    // function generateDrawRequest() private {
+    //     uint256 requestId = vrfConsumer.requestRandomWords();
+    //     requestID = requestId;
+    // }
 
     //Draw card that will be used for distribute cards function, no address is assigned here as opposed to drawCardFromDeck()
-    function drawCard() public returns (uint8 suit, uint8 rank) {
+    function generateCard() public returns (uint8 suit, uint8 rank) {
         require(deck.length > 0, "No cards left in the deck");
         Card memory drawnCard = deck[deck.length - 1];
         (string memory first, string memory second) = splitString(
@@ -123,7 +132,7 @@ contract Deck {
         return (suit, rank);
     }
 
-    function drawCardDouble(address player) public {
+    function double(address player) public {
         require(deck.length > 0, "No cards left in the deck");
         Card memory drawnCard = deck[deck.length - 1];
         (string memory first, string memory second) = splitString(
@@ -163,16 +172,16 @@ contract Deck {
     }
 
     //Assigns the fulfilled request to the string
-    function fulfillDrawRequest() public {
-        (bool fulfilled, uint256[] memory randomWords) = vrfConsumer
-            .getRequestStatus(requestID);
-        require(
-            fulfilled == true,
-            "Please hold on for a moment, transaction in progress. Try again later"
-        );
-        uint256 randomNumber = uint256(randomWords[0]);
-        randomNumbersString = Strings.toString(randomNumber);
-    }
+    // function fulfillDrawRequest() public {
+    //     (bool fulfilled, uint256[] memory randomWords) = vrfConsumer
+    //         .getRequestStatus(requestID);
+    //     require(
+    //         fulfilled == true,
+    //         "Please hold on for a moment, transaction in progress. Try again later"
+    //     );
+    //     uint256 randomNumber = uint256(randomWords[0]);
+    //     randomNumbersString = Strings.toString(randomNumber);
+    // }
 
     //Returns size of the deck, this helps ensure that deck is refreshed.
     function size() public view returns (uint256 length) {
@@ -219,9 +228,13 @@ contract Deck {
     }
 
     //Draws a card that is directed to a particular address
-    function drawFromDeck() public returns (uint8 suit, uint8 rank) {
+    function hit() public returns (uint8 suit, uint8 rank) {
         require(!isRateLimited(msg.sender), "Action rate limited");
-        lastActionTime[msg.sender] = block.timestamp;  
+        lastActionTime[msg.sender] = block.timestamp;
+        require(
+            totalSum(msg.sender) < 21,
+            "You have already exceeded the limit"
+        );
         require(
             Players[msg.sender].currentState == PlayerState.beforeStand,
             "You cannot draw anymore cards."
@@ -292,7 +305,7 @@ contract Deck {
         );
         for (uint256 i = 0; i < 2; i++) {
             for (uint256 j = 0; j < players.length; j++) {
-                (uint8 suit, uint8 rank) = drawCard();
+                (uint8 suit, uint8 rank) = generateCard();
                 Players[players[j]].hand.push(Card(suit, rank));
                 if (rank == 1) {
                     if (Players[players[j]].numAces == 1) {
