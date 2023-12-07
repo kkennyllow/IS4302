@@ -21,12 +21,11 @@ contract BlockJackToken {
     }
 
     function getCredit(
-        address recipient,
-        uint256 weiAmt
-    ) public returns (uint256) {
+        address recipient
+    ) public payable returns (uint256) {
         require(!isRateLimited(msg.sender), "Action rate limited");
         lastActionTime[msg.sender] = block.timestamp;   
-        uint256 amt = weiAmt / (1000000000000000000 / 10000); // Convert weiAmt to BlockJackToken
+        uint256 amt = msg.value / (1000000000000000000 / 10000); // Convert weiAmt to BlockJackToken
         erc20Contract.mint(recipient, amt);
         return amt;
     }
@@ -37,8 +36,6 @@ contract BlockJackToken {
     }
 
     function transferCredit(address recipient, uint256 amt) public {
-        require(!isRateLimited(msg.sender), "Action rate limited");
-        lastActionTime[msg.sender] = block.timestamp;   
         erc20Contract.transfer(recipient, amt);
     }
 
