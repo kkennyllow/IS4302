@@ -3,8 +3,9 @@ pragma solidity ^0.8.20;
 
 import "./VRFv2Consumer.sol";
 import "@openzeppelin/contracts/utils/Strings.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
 
-contract Deck {
+contract Deck is Ownable {
     struct Card {
         uint8 suit;
         uint8 rank;
@@ -36,7 +37,7 @@ contract Deck {
     string public randomNumbersString;
     mapping(address => Player) public Players;
     CardState public cardState;
-    address public owner;
+    address public ownerAddress;
     address[] public Addresses;
     mapping(address => uint256) private lastActionTime;
     uint256 public constant ACTION_COOLDOWN = 2 seconds;
@@ -50,7 +51,7 @@ contract Deck {
     //         }
     //     }
     //     generateDrawRequest();
-    //     owner = msg.sender;
+    //     ownerAddress = msg.sender;
     // }
 
     event InitializePlayer(address indexed, string message);
@@ -69,7 +70,7 @@ contract Deck {
     event DistributeCard(address indexed player, string message);
 
     //Remove this
-    constructor() {
+    constructor() Ownable(msg.sender) {
         // vrfConsumer = vrfConsumerAddress;
         for (uint8 suit = 1; suit <= 4; suit++) {
             for (uint8 rank = 1; rank <= 13; rank++) {
@@ -78,11 +79,16 @@ contract Deck {
         }
         string memory randomnumber = "1231238921739821232119498";
         randomNumbersString = randomnumber;
-        owner = msg.sender;
+        ownerAddress = msg.sender;
     }
 
     function isRateLimited(address user) public view returns (bool) {
         return block.timestamp < lastActionTime[user] + ACTION_COOLDOWN;
+    }
+
+    modifier onlyDealer() {
+        require(owner() == _msgSender(), "Only dealers can call this function");
+        _;
     }
 
     //Initialize the players required.
@@ -98,7 +104,7 @@ contract Deck {
     }
 
     //Shuffle cards based on Fisher-Yates Algorithm.
-    function shuffle() public {
+    function shuffle() public onlyDealer {
         uint256 deckSize = deck.length;
         cardState = CardState.Shuffling;
         for (uint256 i = 0; i < deckSize; i++) {
@@ -112,7 +118,7 @@ contract Deck {
     }
 
     //To make sure that all the cards are back in the deck
-    function refreshDeck() public {
+    function refreshDeck() public onlyDealer {
         delete deck;
         for (uint8 suit = 1; suit <= 4; suit++) {
             for (uint8 rank = 1; rank <= 13; rank++) {
@@ -128,7 +134,7 @@ contract Deck {
     // }
 
     //Draw card that will be used for distribute cards function, no address is assigned here as opposed to drawCardFromDeck()
-    function generateCard() public returns (uint8 suit, uint8 rank) {
+    function generateCard() public onlyDealer returns (uint8 suit, uint8 rank) {
         require(deck.length > 0, "No cards left in the deck");
         Card memory drawnCard = deck[deck.length - 1];
         (string memory first, string memory second) = splitString(
@@ -314,7 +320,7 @@ contract Deck {
         Players[player].sum = 0;
     }
 
-    function distributeCards(address[] memory players) public {
+    function distributeCards(address[] memory players) public onlyDealer {
         cardState = CardState.Distributing;
         require(players.length > 0, "No players provided");
         require(
@@ -390,6 +396,6 @@ contract Deck {
 
     function showDealerCards() public view returns (Card[] memory) {
         require(checkState(), "Not everyone is in stand");
-        return Players[owner].hand;
+        return Players[ownerAddress].hand;
     }
 }
