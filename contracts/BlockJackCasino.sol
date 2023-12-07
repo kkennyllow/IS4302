@@ -31,7 +31,8 @@ contract BlockJackCasino is Ownable {
     uint256 public constant ACTION_COOLDOWN = 2 seconds; 
     uint256 public constant COMMITMENT_WINDOW_DURATION = 10 seconds;
 
-    constructor(Deck deckContractAddress, BlockJackToken blockJackTokenAddress) Ownable(msg.sender)
+    constructor(Deck deckContractAddress, BlockJackToken blockJackTokenAddress)
+        Ownable(msg.sender)
     {
         deckContract = deckContractAddress;
         blockJackTokenContract = blockJackTokenAddress;
@@ -74,10 +75,7 @@ contract BlockJackCasino is Ownable {
 
     function getBJT() public payable {
         //check BJT
-        uint256 amount = blockJackTokenContract.getCredit(
-            msg.sender,
-            msg.value
-        );
+        uint256 amount = blockJackTokenContract.getCredit{value: msg.value}(msg.sender);
         emit buyCredit(amount);
     }
 
@@ -238,12 +236,10 @@ contract BlockJackCasino is Ownable {
             if (
                 state == Deck.PlayerState.BlackJack &&
                 Deck.PlayerState.BlackJack ==
-                deckContract.getState(dealerAddress) && player != dealerAddress
+                deckContract.getState(dealerAddress) &&
+                player != dealerAddress
             ) {
-                blockJackTokenContract.transferCredit(
-                    player,
-                    maxBetAmount
-                );
+                blockJackTokenContract.transferCredit(player, maxBetAmount);
                 emit BlackJack("Player and Dealer Blackjack");
             }
             //Blackjack case
@@ -293,9 +289,7 @@ contract BlockJackCasino is Ownable {
             }
             //Player and Dealer Draw
             else if (
-                playerValue == sum &&
-                sum <= 21 &&
-                player != dealerAddress
+                playerValue == sum && sum <= 21 && player != dealerAddress
             ) {
                 emit dealerDraw(
                     player,
@@ -304,10 +298,7 @@ contract BlockJackCasino is Ownable {
                     sum,
                     "Dealer Draw"
                 );
-                 blockJackTokenContract.transferCredit(
-                    player,
-                    maxBetAmount
-                );
+                blockJackTokenContract.transferCredit(player, maxBetAmount);
             }
             deckContract.beforeStand(player);
             deckContract.clearHand(player);
@@ -316,5 +307,6 @@ contract BlockJackCasino is Ownable {
         deckContract.clearHand(dealerAddress);
         gamblingTable.players = new address[](0);
         deckContract.beforeStand(dealerAddress);
+        deckContract.refreshDeck();
     }
 }
