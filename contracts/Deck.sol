@@ -53,6 +53,21 @@ contract Deck {
     //     owner = msg.sender;
     // }
 
+    event InitializePlayer(address indexed, string message);
+    event Double(
+        address indexed player,
+        string message,
+        uint256 rank,
+        uint256 suit
+    );
+    event Hit(
+        address indexed player,
+        string message,
+        uint256 rank,
+        uint256 suit
+    );
+    event DistributeCard(address indexed player, string message);
+
     //Remove this
     constructor() {
         // vrfConsumer = vrfConsumerAddress;
@@ -78,6 +93,7 @@ contract Deck {
             Players[playerAddress].sum = 0;
             Players[playerAddress].currentState = PlayerState.beforeStand;
             Addresses.push(playerAddress);
+            emit InitializePlayer(playerAddress, "Player Initialized");
         }
     }
 
@@ -169,6 +185,7 @@ contract Deck {
         } else {
             Players[player].sum += rank;
         }
+        emit Double(player, "Double", rank, suit);
     }
 
     //Assigns the fulfilled request to the string
@@ -277,6 +294,7 @@ contract Deck {
         } else {
             Players[msg.sender].sum += rank;
         }
+        emit Hit(msg.sender, "Hit", rank, suit);
     }
 
     function checkHand() public view returns (Card[] memory) {
@@ -326,6 +344,10 @@ contract Deck {
                     }
                 } else {
                     Players[players[j]].sum += rank;
+                }
+                if (i == 1) {
+                    address playerAddress = Players[players[j]].player;
+                    emit DistributeCard(playerAddress, "Distributed Cards");
                 }
             }
         }
