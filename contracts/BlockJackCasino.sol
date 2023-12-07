@@ -27,9 +27,10 @@ contract BlockJackCasino is Ownable {
     mapping(address => uint256) public revealedBets;
     mapping(address => uint256) private lastActionTime;
 
-    uint256 public constant ACTION_COOLDOWN = 2 seconds; 
+    uint256 public constant ACTION_COOLDOWN = 2 seconds;
 
-    constructor(Deck deckContractAddress, BlockJackToken blockJackTokenAddress) Ownable(msg.sender)
+    constructor(Deck deckContractAddress, BlockJackToken blockJackTokenAddress)
+        Ownable(msg.sender)
     {
         deckContract = deckContractAddress;
         blockJackTokenContract = blockJackTokenAddress;
@@ -72,10 +73,7 @@ contract BlockJackCasino is Ownable {
 
     function getBJT() public payable {
         //check BJT
-        uint256 amount = blockJackTokenContract.getCredit(
-            msg.sender,
-            msg.value
-        );
+        uint256 amount = blockJackTokenContract.getCredit{value: msg.value}(msg.sender);
         emit buyCredit(amount);
     }
 
@@ -93,15 +91,22 @@ contract BlockJackCasino is Ownable {
         return gamblingTable.minimumBet;
     }
 
-    function createCommitment(uint256 betAmount, uint256 nonce) public pure returns (bytes32) {
+    function createCommitment(uint256 betAmount, uint256 nonce)
+        public
+        pure
+        returns (bytes32)
+    {
         return keccak256(abi.encodePacked(betAmount, nonce));
     }
 
     // Players commit their bet as a hash (only used if increasing bet)
     function commitIncreaseBet(bytes32 hashCommitment) public {
         require(!isRateLimited(msg.sender), "Action rate limited");
-        require(gamblingTable.gamblingState == GamblingState.NotGambling, "Betting phase is over");
-        lastActionTime[msg.sender] = block.timestamp;   
+        require(
+            gamblingTable.gamblingState == GamblingState.NotGambling,
+            "Betting phase is over"
+        );
+        lastActionTime[msg.sender] = block.timestamp;
         commitments[msg.sender] = hashCommitment;
     }
 
@@ -109,15 +114,22 @@ contract BlockJackCasino is Ownable {
     function revealIncreaseBet(uint256 betAmount, uint256 nonce) public {
         require(!isRateLimited(msg.sender), "Action rate limited");
         require(commitments[msg.sender] != 0, "No commitment found");
-        require(keccak256(abi.encodePacked(betAmount, nonce)) == commitments[msg.sender], "Bet does not match commitment");
-        lastActionTime[msg.sender] = block.timestamp;   
+        require(
+            keccak256(abi.encodePacked(betAmount, nonce)) ==
+                commitments[msg.sender],
+            "Bet does not match commitment"
+        );
+        lastActionTime[msg.sender] = block.timestamp;
         revealedBets[msg.sender] = betAmount;
         commitments[msg.sender] = 0; // Reset commitment
         increaseBet(betAmount);
     }
 
-    function increaseBet(uint256 betAmount) public {
-        require(gamblingTable.gamblingState == GamblingState.NotGambling, "You cannot increase your bet in the middle of a game");
+    function increaseBet(uint256 betAmount) private {
+        require(
+            gamblingTable.gamblingState == GamblingState.NotGambling,
+            "You cannot increase your bet in the middle of a game"
+        );
         uint256 BJT = checkBJT();
         require(
             BJT >= betAmount,
@@ -137,8 +149,10 @@ contract BlockJackCasino is Ownable {
     }
 
     function double() public {
-        deckContract.drawCardDouble(msg.sender);
         gamblingTable.playerBets[msg.sender] *= 2;
+        deckContract.double(msg.sender);
+        uint256 betAmount = getBet();
+        blockJackTokenContract.transferCredit(dealerAddress, betAmount);
     }
 
     //join table
@@ -229,12 +243,10 @@ contract BlockJackCasino is Ownable {
             if (
                 state == Deck.PlayerState.BlackJack &&
                 Deck.PlayerState.BlackJack ==
-                deckContract.getState(dealerAddress) && player != dealerAddress
+                deckContract.getState(dealerAddress) &&
+                player != dealerAddress
             ) {
-                blockJackTokenContract.transferCredit(
-                    player,
-                    maxBetAmount
-                );
+                blockJackTokenContract.transferCredit(player, maxBetAmount);
                 emit BlackJack("Player and Dealer Blackjack");
             }
             //Blackjack case
@@ -284,9 +296,7 @@ contract BlockJackCasino is Ownable {
             }
             //Player and Dealer Draw
             else if (
-                playerValue == sum &&
-                sum <= 21 &&
-                player != dealerAddress
+                playerValue == sum && sum <= 21 && player != dealerAddress
             ) {
                 emit dealerDraw(
                     player,
@@ -295,10 +305,7 @@ contract BlockJackCasino is Ownable {
                     sum,
                     "Dealer Draw"
                 );
-                 blockJackTokenContract.transferCredit(
-                    player,
-                    maxBetAmount
-                );
+                blockJackTokenContract.transferCredit(player, maxBetAmount);
             }
             deckContract.beforeStand(player);
             deckContract.clearHand(player);
