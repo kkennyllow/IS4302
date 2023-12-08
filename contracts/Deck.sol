@@ -180,27 +180,27 @@ contract Deck is Ownable {
             Players[player].numAces -= 1;
         }
         if (
-            Players[msg.sender].numAces >= 1 &&
-            Players[msg.sender].sum + rank > 21
+            Players[player].numAces >= 1 &&
+            Players[player].sum + rank > 21
         ) {
-            Players[msg.sender].sum -= 10;
-            Players[msg.sender].numAces -= 1;
+            Players[player].sum -= 10;
+            Players[player].numAces -= 1;
         }
         if (rank == 1) {
-            if (Players[msg.sender].numAces >= 1) {
-                Players[msg.sender].sum += 1;
-                Players[msg.sender].numAces -= 1;
-            } else if (Players[msg.sender].sum + 11 > 21) {
-                Players[msg.sender].sum += 1;
+            if (Players[player].numAces >= 1) {
+                Players[player].sum += 1;
+                Players[player].numAces -= 1;
+            } else if (Players[player].sum + 11 > 21) {
+                Players[player].sum += 1;
             } else {
-                Players[msg.sender].sum += 11;
-                Players[msg.sender].numAces += 1;
+                Players[player].sum += 11;
+                Players[player].numAces += 1;
             }
         } else if (rank >= 10) {
             rank = 10;
-            Players[msg.sender].sum += rank;
+            Players[player].sum += rank;
         } else {
-            Players[msg.sender].sum += rank;
+            Players[player].sum += rank;
         }
         emit Double(player, "Double", rank, suit);
     }
