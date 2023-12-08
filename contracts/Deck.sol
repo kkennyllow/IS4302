@@ -86,12 +86,12 @@ contract Deck is Ownable {
     }
 
     modifier onlyDealer() {
-        require(owner() == _msgSender(), "Only dealers can call this function");
+        require(owner() == msg.sender || owner() == tx.origin, "Only dealers can call this function");
         _;
     }
 
     //Shuffle cards based on Fisher-Yates Algorithm.
-    function shuffle() public onlyDealer {
+    function shuffle() public onlyDealer  {
         uint256 deckSize = deck.length;
         cardState = CardState.Shuffling;
         for (uint256 i = 0; i < deckSize; i++) {
@@ -105,7 +105,7 @@ contract Deck is Ownable {
     }
 
     //To make sure that all the cards are back in the deck
-    function refreshDeck() public onlyDealer {
+    function refreshDeck() onlyDealer public {
         delete deck;
         for (uint8 suit = 1; suit <= 4; suit++) {
             for (uint8 rank = 1; rank <= 13; rank++) {
@@ -320,7 +320,7 @@ contract Deck is Ownable {
         Players[player].sum = 0;
     }
 
-    function distributeCards(address[] memory players) public onlyDealer {
+    function distributeCards(address[] memory players) public  onlyDealer{
         cardState = CardState.Distributing;
         require(players.length > 0, "No players provided");
         require(
