@@ -54,7 +54,6 @@ contract Deck is Ownable {
     //     ownerAddress = msg.sender;
     // }
 
-    event InitializePlayer(address indexed, string message);
     event Double(
         address indexed player,
         string message,
@@ -89,18 +88,6 @@ contract Deck is Ownable {
     modifier onlyDealer() {
         require(owner() == _msgSender(), "Only dealers can call this function");
         _;
-    }
-
-    //Initialize the players required.
-    function initializePlayers(address[] memory playerAddresses) public {
-        for (uint256 i = 0; i < playerAddresses.length; i++) {
-            address playerAddress = playerAddresses[i];
-            Players[playerAddress].player = playerAddress;
-            Players[playerAddress].sum = 0;
-            Players[playerAddress].currentState = PlayerState.beforeStand;
-            Addresses.push(playerAddress);
-            emit InitializePlayer(playerAddress, "Player Initialized");
-        }
     }
 
     //Shuffle cards based on Fisher-Yates Algorithm.
