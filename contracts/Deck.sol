@@ -264,6 +264,7 @@ contract Deck is Ownable {
     //Draws a card that is directed to a particular address
     function hit() public returns (uint8 suit, uint8 rank) {
         require(!isRateLimited(msg.sender), "Action rate limited");
+        require( Players[msg.sender].sum < 21 ,"You have already reach more than 21 points");
         lastActionTime[msg.sender] = block.timestamp;
         require(
             totalSum(msg.sender) < 21,
