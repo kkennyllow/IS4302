@@ -54,7 +54,6 @@ contract Deck is Ownable {
     //     ownerAddress = msg.sender;
     // }
 
-    event InitializePlayer(address indexed, string message);
     event Double(
         address indexed player,
         string message,
@@ -89,18 +88,6 @@ contract Deck is Ownable {
     modifier onlyDealer() {
         require(owner() == _msgSender(), "Only dealers can call this function");
         _;
-    }
-
-    //Initialize the players required.
-    function initializePlayers(address[] memory playerAddresses) public {
-        for (uint256 i = 0; i < playerAddresses.length; i++) {
-            address playerAddress = playerAddresses[i];
-            Players[playerAddress].player = playerAddress;
-            Players[playerAddress].sum = 0;
-            Players[playerAddress].currentState = PlayerState.beforeStand;
-            Addresses.push(playerAddress);
-            emit InitializePlayer(playerAddress, "Player Initialized");
-        }
     }
 
     //Shuffle cards based on Fisher-Yates Algorithm.
@@ -177,29 +164,19 @@ contract Deck is Ownable {
             Players[player].sum -= 10;
             Players[player].numAces -= 1;
         }
-        if (
-            Players[msg.sender].numAces >= 1 &&
-            Players[msg.sender].sum + rank > 21
-        ) {
-            Players[msg.sender].sum -= 10;
-            Players[msg.sender].numAces -= 1;
-        }
         if (rank == 1) {
-            if (Players[msg.sender].numAces >= 1) {
-                Players[msg.sender].sum += 1;
-                Players[msg.sender].numAces -= 1;
-            } else if ( Players[msg.sender].sum + 11 > 21) {
-                Players[msg.sender].sum += 1;
-            } 
-            else {
-                Players[msg.sender].sum += 11;
-                Players[msg.sender].numAces += 1;
+            if (Players[player].numAces >= 1) {
+                Players[player].sum += 1;
+                Players[player].numAces -= 1;
+            } else {
+                Players[player].sum += 11;
+                Players[player].numAces += 1;
             }
         } else if (rank >= 10) {
             rank = 10;
-            Players[msg.sender].sum += rank;
+            Players[player].sum += rank;
         } else {
-            Players[msg.sender].sum += rank;
+            Players[player].sum += rank;
         }
         emit Double(player, "Double", rank, suit);
     }
@@ -289,7 +266,7 @@ contract Deck is Ownable {
         suit = swap.suit;
         rank = swap.rank;
         Players[msg.sender].hand.push(Card(suit, rank));
-         if (
+        if (
             Players[msg.sender].numAces >= 1 &&
             Players[msg.sender].sum + rank > 21
         ) {
@@ -300,10 +277,7 @@ contract Deck is Ownable {
             if (Players[msg.sender].numAces >= 1) {
                 Players[msg.sender].sum += 1;
                 Players[msg.sender].numAces -= 1;
-            } else if ( Players[msg.sender].sum + 11 > 21) {
-                Players[msg.sender].sum += 1;
-            } 
-            else {
+            } else {
                 Players[msg.sender].sum += 11;
                 Players[msg.sender].numAces += 1;
             }
