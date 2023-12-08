@@ -11,7 +11,6 @@ contract BlockJackCasino is Ownable {
     }
 
     struct Table {
-        uint256 tableNumber;
         address[] players;
         mapping(address => uint256) playerBets;
         uint256 minimumBet;
@@ -121,7 +120,7 @@ contract BlockJackCasino is Ownable {
         increaseBet(betAmount);
     }
 
-    function increaseBet(uint256 betAmount) public {
+    function increaseBet(uint256 betAmount) private {
         require(gamblingTable.gamblingState == GamblingState.NotGambling, "You cannot increase your bet in the middle of a game");
         uint256 BJT = checkBJT();
         require(
@@ -142,10 +141,10 @@ contract BlockJackCasino is Ownable {
     }
 
     function double() public {
-        gamblingTable.playerBets[msg.sender] *= 2;
-        deckContract.double(msg.sender);
         uint256 betAmount = getBet();
         blockJackTokenContract.transferCredit(dealerAddress, betAmount);
+        gamblingTable.playerBets[msg.sender] *= 2;
+        deckContract.double(msg.sender);
     }
 
     //join table
@@ -192,13 +191,14 @@ contract BlockJackCasino is Ownable {
         gamblingTable.playerBets[msg.sender] = 0;
     }
 
-    function gamble() public onlyDealer {
+    function gamble() public  onlyDealer {
         require(
             gamblingTable.gamblingState == GamblingState.NotGambling,
             "Gambling is in progress"
         );
         gamblingTable.gamblingState = GamblingState.Gambling;
         gamblingTable.players.push(msg.sender);
+        deckContract.shuffle(); //Here remove if using metamask
         deckContract.distributeCards(gamblingTable.players);
     }
 
@@ -263,7 +263,7 @@ contract BlockJackCasino is Ownable {
             }
             // Dealer lose
             else if (
-                player != dealerAddress && playerValue > sum && sum <= 21
+                player != dealerAddress && playerValue > sum && playerValue <= 21
             ) {
                 maxBetAmount *= 2;
                 blockJackTokenContract.transferCredit(player, maxBetAmount);
@@ -273,6 +273,16 @@ contract BlockJackCasino is Ownable {
                     playerValue,
                     sum,
                     "Dealer Lost"
+                );
+            //Player Blow
+            } else if ( player != dealerAddress && playerValue > 21
+            ) {
+                emit dealerWon(
+                    player,
+                    maxBetAmount,
+                    sum,
+                    playerValue,
+                    "Player Blow"
                 );
             }
             //Player lose
