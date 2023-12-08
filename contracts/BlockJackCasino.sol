@@ -28,7 +28,7 @@ contract BlockJackCasino is Ownable {
 
     uint256 public commitmentDeadline;
     uint256 public constant ACTION_COOLDOWN = 2 seconds; 
-    uint256 public constant COMMITMENT_WINDOW_DURATION = 10 seconds;
+    uint256 public constant COMMITMENT_WINDOW_DURATION = 30 seconds;
 
     constructor(Deck deckContractAddress, BlockJackToken blockJackTokenAddress)
         Ownable(msg.sender)
