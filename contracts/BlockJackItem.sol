@@ -8,6 +8,8 @@ contract BlockJackItem is ERC721URIStorage, Ownable {
     uint256 private _currentTokenId = 0;
     address public ownerAddress;
 
+    event ItemMinted(uint256 indexed itemId, address indexed recipient, string metadataURI);
+
     constructor() ERC721("BlockJack Item", "BJI") Ownable(msg.sender) {
         ownerAddress = msg.sender;
     }
@@ -22,6 +24,7 @@ contract BlockJackItem is ERC721URIStorage, Ownable {
         _mint(recipient, newItemId);
         _setTokenURI(newItemId, metadataURI);
         _incrementTokenId();
+        emit ItemMinted(newItemId, recipient, metadataURI);
         return newItemId;
     }
 
