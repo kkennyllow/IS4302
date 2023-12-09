@@ -63,44 +63,88 @@ contract BlockJackCasino is Ownable {
     event dealerBlow(uint256 count, string message);
     event BlackJack(string message);
 
+     /**
+     * @dev Modifier to restrict the execution of a function to only the owner (dealer) of the contract.
+     * Throws an error if the caller is not the owner.
+     */
     modifier onlyDealer() {
         require(owner() == _msgSender(), "Only dealers can call this function");
         _;
     }
-
+     /**
+     * @dev Checks if a user is rate-limited based on the last action timestamp.
+     * Users are rate-limited to prevent frequent actions within a cooldown period.
+     * @param user The address of the user to check for rate limitation.
+     * @return A boolean indicating whether the user is currently rate-limited or not.
+     */
     function isRateLimited(address user) public view returns (bool) {
         return block.timestamp < lastActionTime[user] + ACTION_COOLDOWN;
     }
 
+     /**
+     * @dev Allows users to purchase BlockJackToken (BJT) by sending Ether.
+     * The Ether sent is converted to BJT based on the current conversion rate.
+     * The BJT is then credited to the user's account using the ERC20 contract.
+     * @notice Users must include enough Ether to cover the desired BJT amount.
+     * @return The amount of BlockJackToken (BJT) credited to the user.
+     * @emit buyCredit Emits an event with the credited BJT amount.
+     */
     function getBJT() public payable {
-        //check BJT
         uint256 amount = blockJackTokenContract.getCredit{value: msg.value}(msg.sender);
         emit buyCredit(amount);
     }
 
+    /**
+    * @dev Retrieves the current BlockJackToken (BJT) balance of the caller.
+    * @return The amount of BlockJackToken (BJT) credited to the caller's account.
+    */
     function checkBJT() public view returns (uint256) {
-        //check player wallet
         uint256 credits = blockJackTokenContract.checkCredit(msg.sender);
         return credits;
     }
 
+    /**
+     * @dev Sets the minimum bet amount for the gambling table. Only the dealer can invoke this function.
+     * @param minimumBet The new minimum bet amount to be set for the gambling table.
+     */
     function setMinimumBet(uint256 minimumBet) public onlyDealer {
         gamblingTable.minimumBet = minimumBet;
     }
 
+    /**
+     * @dev Retrieves the current minimum bet amount for the gambling table.
+     * @return The current minimum bet amount.
+     */
     function getMinimumBet() public view returns (uint256) {
         return gamblingTable.minimumBet;
     }
 
+    /**
+    * @dev Initiates the betting phase by setting the commitment deadline.
+    * Only the contract owner can call this function.
+    */
     function startBettingPhase() public onlyOwner {
         commitmentDeadline = block.timestamp + COMMITMENT_WINDOW_DURATION;
     }
-
+    
+     /**
+     * @dev Creates a commitment hash based on the provided bet amount and nonce.
+     * This hash is used during the betting phase for secure commitment.
+     *
+     * @param betAmount The amount of the bet.
+     * @param nonce A unique value to enhance the security of the commitment.
+     * @return bytes32 The commitment hash.
+     */
     function createCommitment(uint256 betAmount, uint256 nonce) public pure returns (bytes32) {
         return keccak256(abi.encodePacked(betAmount, nonce));
     }
 
-    // Players commit their bet as a hash (only used if increasing bet)
+   /**
+     * @dev Players commit their increased bet as a hash during the commitment phase.
+     * This hash is used for secure commitment and is only applicable if players wish to increase their bet.
+     *
+     * @param hashCommitment The commitment hash representing the increased bet.
+     */
     function commitIncreaseBet(bytes32 hashCommitment) public {
         require(!isRateLimited(msg.sender), "Action rate limited");
         require(gamblingTable.gamblingState == GamblingState.NotGambling, "Betting phase is over");
@@ -109,7 +153,18 @@ contract BlockJackCasino is Ownable {
         commitments[msg.sender] = hashCommitment;
     }
 
-    // Players reveal their bet (only used if increasing bet)
+     /**
+     * @dev Players reveal their previously committed increased bet during the reveal phase.
+     * This is used to verify and process the increased bet.
+     *
+     * @param betAmount The actual bet amount that the player intends to increase to.
+     * @param nonce A unique number to ensure the uniqueness of the commitment.
+     *
+     * Requirements:
+     * - The player must not be rate-limited.
+     * - A commitment must exist for the player.
+     * - The revealed bet must match the commitment.
+     */
     function revealIncreaseBet(uint256 betAmount, uint256 nonce) public {
         require(!isRateLimited(msg.sender), "Action rate limited");
         require(commitments[msg.sender] != 0, "No commitment found");
@@ -120,6 +175,20 @@ contract BlockJackCasino is Ownable {
         increaseBet(betAmount);
     }
 
+     /**
+     * @dev Increases the player's bet amount during the betting phase.
+     *
+     * @param betAmount The amount by which the player wants to increase their bet.
+     *
+     * Requirements:
+     * - The gambling state must be 'NotGambling'.
+     * - The player must have sufficient BlockJack Tokens (BJT) to cover the increased bet.
+     * - The player cannot increase the bet in the middle of a game.
+     *
+     * Effects:
+     * - Updates the player's bet amount in the gambling table.
+     * - Transfers the increased bet amount to the dealer.
+     */
     function increaseBet(uint256 betAmount) private {
         require(gamblingTable.gamblingState == GamblingState.NotGambling, "You cannot increase your bet in the middle of a game");
         uint256 BJT = checkBJT();
@@ -131,15 +200,28 @@ contract BlockJackCasino is Ownable {
         blockJackTokenContract.transferCredit(dealerAddress, betAmount);
     }
 
+    /**
+     * @dev Retrieves the current bet amount of the player.
+     *
+     * @return The current bet amount of the player.
+     */
     function getBet() public view returns (uint256 betAmount) {
         return gamblingTable.playerBets[msg.sender];
     }
 
+     /**
+     * @dev Retrieves the current number of players seated at the gambling table.
+     *
+     * @return The number of players at the gambling table.
+     */
     function getTableSize() public view returns (uint256) {
-        //get Number of Players
         return gamblingTable.players.length;
     }
 
+     /**
+     * @dev Doubles the current bet of the calling player and initiates the double action in the deck.
+     *      Transfers the original bet amount to the dealer and updates the player's bet accordingly.
+     */
     function double() public {
         uint256 betAmount = getBet();
         blockJackTokenContract.transferCredit(dealerAddress, betAmount);
@@ -147,7 +229,12 @@ contract BlockJackCasino is Ownable {
         deckContract.double(msg.sender);
     }
 
-    //join table
+    /**
+     * @dev Allows a player to join the BlockJack table, provided the table is not in an active game state.
+     *      Players, excluding the dealer, can join the table, subject to player limits.
+     *      The joining player must meet the minimum bet requirement set by the owner.
+     *      The player's bet is initialized to the minimum bet, and the corresponding tokens are transferred to the dealer.
+     */
     function joinTable() public {
         require(
             msg.sender != dealerAddress,
@@ -174,6 +261,11 @@ contract BlockJackCasino is Ownable {
         blockJackTokenContract.transferCredit(dealerAddress, minimumBet);
     }
 
+    /**
+     * @dev Allows a player to leave the Blockjack table, provided the table is not in an active game state.
+     *      Players can leave the table when it is not in an active gambling state.
+     *      The player's seat is vacated, and their bet is reset to zero.
+     */
     function leaveTable() public {
         require(
             gamblingTable.gamblingState == GamblingState.NotGambling,
@@ -191,6 +283,12 @@ contract BlockJackCasino is Ownable {
         gamblingTable.playerBets[msg.sender] = 0;
     }
 
+    /**
+     * @dev Initiates the gambling phase in the Blockjack game, allowing players to place their bets and start playing.
+     *      Only the dealer can initiate the gambling phase.
+     *      The function checks if gambling is not already in progress and sets the game state to Gambling.
+     *      Players are added to the table, and the dealer shuffles and distributes cards.
+     */
     function gamble() public  onlyDealer {
         require(
             gamblingTable.gamblingState == GamblingState.NotGambling,
@@ -202,6 +300,11 @@ contract BlockJackCasino is Ownable {
         deckContract.distributeCards(gamblingTable.players);
     }
 
+    
+     /**
+     * @dev Checks the status of all players on the gambling table to determine if they have all reached the 'Stand' state.
+     * @return check A boolean indicating whether all players are in the 'Stand' state.
+     */
     function checkStatus() public view returns (bool check) {
         uint256 players = getTableSize();
         for (uint256 i = 0; i < players; i++) {
@@ -215,6 +318,12 @@ contract BlockJackCasino is Ownable {
         return true;
     }
 
+    /**
+     * @dev Ends the gambling round, processes the results, and distributes winnings or losses accordingly.
+     * Only the dealer can call this function.
+     * Emits events for various outcomes, such as BlackJack, Dealer blow, Dealer lost, Player blow, Dealer won, and Dealer/Player draw.
+     * Resets player states, clears hands, and refreshes the deck for the next round.
+     */
     function endGamble() public onlyDealer {
         require(checkStatus(), "Table not ready for further processing");
         gamblingTable.gamblingState = GamblingState.NotGambling;
