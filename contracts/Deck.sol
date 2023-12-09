@@ -500,6 +500,15 @@ contract Deck is Ownable {
     {
         return Players[players].hand[0];
     }
+     /**
+     * @dev Allows the dealer to set a player's game state to 'beforeStand' in preparation for a new game.
+     * Only the dealer can invoke this function.
+     * 
+     * @param player The address of the player whose game state is being set.
+     */
+    function beforeStand(address player) public onlyDealer {
+        Players[player].currentState = PlayerState.beforeStand;
+    }
 
     /**
      * @dev Checks if all players in the BlockJack Casino game have reached the 'Stand' state.
