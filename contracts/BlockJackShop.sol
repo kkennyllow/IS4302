@@ -2,10 +2,11 @@
 pragma solidity ^0.8.20;
 
 import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
 import "./BlockJackToken.sol";
 import "./BlockJackItem.sol";
 
-contract BlockjackShop {
+contract BlockjackShop is Ownable {
     BlockJackItem public blockJackItemContract;
     BlockJackToken public blockJackTokenContract;
 
@@ -39,6 +40,15 @@ contract BlockjackShop {
     }
 
     /**
+     * @dev Modifier that allows the function to be called only by the contract owner (admin).
+     * Reverts with an error message if the caller is not the owner.
+     */
+    modifier onlyAdmin() {
+        require(owner() == _msgSender(), "Only admin can call this function");
+        _;
+    }
+
+    /**
      * @dev Checks if a user is currently rate-limited.
      * Users are rate-limited to prevent frequent actions within a specified cooldown period.
      * @param user The address of the user.
@@ -50,13 +60,14 @@ contract BlockjackShop {
 
     /**
      * @dev List an item in the marketplace with a specified price.
+     * Only the contract owner (admin) can call this function.
      * Only the owner of the item can list it for sale.
      * @param itemId The unique identifier of the item to be listed.
      * @param price The price at which the item is listed for sale.
      * Requirements:
      * - The caller must be the owner of the item.
      */
-    function listItem(uint256 itemId, uint256 price) public {
+    function listItem(uint256 itemId, uint256 price) public onlyAdmin {
         require(
             msg.sender == blockJackItemContract.ownerOf(itemId),
             "Not the item owner"
