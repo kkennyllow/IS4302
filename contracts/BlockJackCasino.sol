@@ -86,8 +86,6 @@ contract BlockJackCasino is Ownable {
      * The Ether sent is converted to BJT based on the current conversion rate.
      * The BJT is then credited to the user's account using the ERC20 contract.
      * @notice Users must include enough Ether to cover the desired BJT amount.
-     * @return The amount of BlockJackToken (BJT) credited to the user.
-     * @emit buyCredit Emits an event with the credited BJT amount.
      */
     function getBJT() public payable {
         uint256 amount = blockJackTokenContract.getCredit{value: msg.value}(msg.sender);
@@ -203,7 +201,7 @@ contract BlockJackCasino is Ownable {
     /**
      * @dev Retrieves the current bet amount of the player.
      *
-     * @return The current bet amount of the player.
+     * @return betAmount ,The current bet amount of the player.
      */
     function getBet() public view returns (uint256 betAmount) {
         return gamblingTable.playerBets[msg.sender];
