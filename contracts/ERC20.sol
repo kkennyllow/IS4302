@@ -1,10 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-//first need to approve the address of spender
-// Check the allowance
-//Finally able to call transferFrom to transfer tokens
-
 /**
  * @title SafeMath
  * @dev Math operations with safety checks that throw on error
